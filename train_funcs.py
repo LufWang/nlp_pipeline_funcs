@@ -30,6 +30,8 @@ import json
 import shortuuid
 from nlp_pipeline_funcs.config import pretrained_path
 
+
+
 def get_config(params):
     # random pick a set of params
     config = {}
@@ -84,7 +86,7 @@ class build_torch_dataset(Dataset):
                   'text': text,
                   'input_ids': encoding['input_ids'].flatten(),
                   'attention_mask': encoding['attention_mask'].flatten(),
-                  'labels': torch.tensor(label, dtype=torch.int64)
+                  'labels': torch.tensor(label, dtype=torch.float)
                 }
 
 
@@ -312,6 +314,7 @@ def get_loss_pred(outputs, labels, loss_fn, threshold, binary):
     
     
         return loss, preds, preds_proba, m(outputs)
+
 
 def train_epoch(model, train_data_loader, loss_fn, optimizer, device, scheduler, threshold = 0.5, binary = True):
     
