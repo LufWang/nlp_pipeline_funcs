@@ -684,7 +684,7 @@ def train_binary(
                 
                 val_loss = np.mean(val_losses) # getting average val loss
                 val_losses_list.append(val_loss)
-                train_loss = running_train_loss / eval_every # getting average train loss
+                train_loss = running_train_loss / (eval_steps[eval_ind] - eval_steps[eval_ind-1]) # getting average train loss
                 train_losses_list.append(train_loss)
                 
                 running_train_loss = 0 # reset training loss               
