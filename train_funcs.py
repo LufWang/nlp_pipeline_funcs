@@ -477,7 +477,7 @@ def save_model(model, save_path, config, model_info, model_name,labels_to_indexe
     print('Model Files Saved.')
     print()
     
-def save_model_v2(model, model_name, save_path, files):
+def save_model_v2(model, tokenizer, model_name, save_path, files):
     """
     model - model
     save_path - path
@@ -500,6 +500,9 @@ def save_model_v2(model, model_name, save_path, files):
     
     # save torch model
     torch.save(model.state_dict(), os.path.join(save_path_final, model_id + '|' + 'model.bin'))  # save model
+
+    # save tokenizer
+    tokenizer.save_pretrained(save_path_final)
     
     # save file in the files
     for file_name in files:
@@ -629,6 +632,7 @@ def train_binary(df_train,
             global_step += 1
 
             model.train()
+
             input_ids = d["input_ids"].to(device)
             attention_mask = d["attention_mask"].to(device)
             labels = d["labels"].to(device) 
@@ -658,9 +662,7 @@ def train_binary(df_train,
             
             # evaluating based on step
             if global_step == eval_steps[eval_ind]:
-                print()
-                eval_ind += 1
-                
+                print()                
                 
                 val_preds, val_preds_probas, val_trues, val_losses = eval_model(
                                                                                 model,
@@ -682,9 +684,12 @@ def train_binary(df_train,
                 
                 running_train_loss = 0 # reset training loss               
 
+                # print out scores
+                print(f'Evaluation at Step <{eval_steps[eval_ind]}>....')
+                print(f'Train loss {round(train_loss, 3)} Val loss {round(val_loss, 3)} Val precision: {val_precision} recall: {val_recall}  f1: {val_f1}')
+                print()
                 
-                print(f'Train loss {train_loss} Val loss {val_loss} Val precision: {val_precision} recall: {val_recall}  f1: {val_f1}')
-
+                eval_ind += 1
                 
                 # check if needed to be early stopped:
                 if early_stopping:
@@ -694,6 +699,8 @@ def train_binary(df_train,
                             return val_f1_list
 
                     patience_count += 1
+                
+
                 
                 
                 # if new best validation f1 save model
@@ -709,17 +716,15 @@ def train_binary(df_train,
                             'val_recall': round (val_recall, 3),
                             'val_f1': round(val_f1, 3),
                             'val_loss': round(val_loss, 5),
-                            'DTREE-Binary': label_name
+                            'label_name': label_name
                         }
                     }
                     
                     
-                    save_model_v2(model, label_name, save_path, files)
-                    tokenizer.save_pretrained(save_path)
+                    save_model_v2(model, tokenizer, label_name, save_path, files)
 
                     # updating scores
                     best_val_f1 = val_f1
-
                     patience_count = 0 # reset early stopping patience count if a model saved
                 
                 
