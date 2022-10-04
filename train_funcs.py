@@ -732,7 +732,7 @@ def train_binary(df_train,
         
             
                 
-    return val_f1_list
+    return val_f1_list, best_val_f1
     
 
 
