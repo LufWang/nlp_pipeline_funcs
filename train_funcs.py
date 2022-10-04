@@ -521,7 +521,9 @@ def save_model_v2(model, tokenizer, model_name, save_path, files):
     print()
 
     
-def train_binary(df_train, 
+def train_binary(
+                 model,
+                 df_train, 
                  df_val, 
                  label_name, 
                  text_col, 
@@ -529,7 +531,7 @@ def train_binary(df_train,
                  threshold,
                  best_val_f1_global,
                  device, 
-                 eval_every,
+                 eval_freq, # evaluation frequency per epoch
                  early_stopping,
                  save_path):
     
@@ -572,12 +574,12 @@ def train_binary(df_train,
     val_data_loader = create_data_loader(df_val, text_col, label_name,tokenizer, int(MAX_LEN), int(BATCH_SIZE))
     
     # initialize model
-    model = CustomBertBinaryClassifier(pretrained_path, 1, device)
-    model = model.to(device)
+    # model = CustomBertBinaryClassifier(pretrained_path, 1, device)
+    # model = model.to(device)
 
 
     ## training prereqs
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay = weight_decay) # optimizer to update weights
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay = weight_decay) # optimizer to update weights
     total_steps = len(train_data_loader) * EPOCHS
     scheduler = get_linear_schedule_with_warmup(
                                               optimizer,
@@ -592,11 +594,14 @@ def train_binary(df_train,
     
     
     # get list eval steps 
-    total_steps = len(train_data_loader) * EPOCHS
+    epoch_steps = len(train_data_loader)
+    total_steps = epoch_steps * EPOCHS
+    total_evaluations = eval_freq * EPOCHS
     print(f'Total Training Steps: {total_steps}')
-    eval_steps = [x * eval_every for x in range(1, int(total_steps / eval_every) + 1)]
-    if eval_steps[-1] != total_steps:
-        eval_steps.append(total_steps)
+    eval_steps = [int(total_steps/total_evaluations) * i for i in range(1, total_evaluations)]
+    eval_steps.append(total_steps- 1)
+
+
     print('Evaluation Steps:', eval_steps)
     eval_ind = 0
     
@@ -685,7 +690,7 @@ def train_binary(df_train,
                 running_train_loss = 0 # reset training loss               
 
                 # print out scores
-                print(f'Evaluation at Step <{eval_steps[eval_ind]}>....')
+                print(f'Evaluation at Step {eval_steps[eval_ind]}....')
                 print(f'Train loss {round(train_loss, 3)} Val loss {round(val_loss, 3)} Val precision: {val_precision} recall: {val_recall}  f1: {val_f1}')
                 print()
                 
