@@ -573,11 +573,6 @@ def train_binary(
     train_data_loader = create_data_loader(df_train, text_col, label_name, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
     val_data_loader = create_data_loader(df_val, text_col, label_name,tokenizer, int(MAX_LEN), int(BATCH_SIZE))
     
-    # initialize model
-    # model = CustomBertBinaryClassifier(pretrained_path, 1, device)
-    # model = model.to(device)
-
-
     ## training prereqs
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay = weight_decay) # optimizer to update weights
     total_steps = len(train_data_loader) * EPOCHS
@@ -605,10 +600,6 @@ def train_binary(
     print('Evaluation Steps:', eval_steps)
     eval_ind = 0
     
-    # initialize scores and name
-    best_val_f1 = 0
-
-
     binary = True  # doing binary classificaiton
     
     global_step = 0
@@ -634,7 +625,7 @@ def train_binary(
         # training through the train_data_loader
         for d in tqdm(train_data_loader):
             
-            global_step += 1
+            
 
             model.train()
 
@@ -691,7 +682,7 @@ def train_binary(
 
                 # print out scores
                 print(f'Evaluation at Step {eval_steps[eval_ind]}....')
-                print(f'Train loss {round(train_loss, 3)} Val loss {round(val_loss, 3)} Val precision: {val_precision} recall: {val_recall}  f1: {val_f1}')
+                print(f'Train loss {round(train_loss, 3)} || Val loss {round(val_loss, 3)} Val precision: {val_precision} recall: {val_recall}  f1: {val_f1}')
                 print()
                 
                 eval_ind += 1
@@ -731,7 +722,8 @@ def train_binary(
                     # updating scores
                     best_val_f1 = val_f1
                     patience_count = 0 # reset early stopping patience count if a model saved
-                
+
+            global_step += 1    
                 
         
         
@@ -739,153 +731,6 @@ def train_binary(
                 
     return val_f1_list, best_val_f1
     
-
-
-
-def train_multi(df_train, 
-                df_val, 
-                label_col,
-                text_col,
-                config,
-                best_val_f1_global,
-                device, 
-                labels_to_indexes,
-                indexes_to_labels,
-                focused_indexes = None, # label index to focus the performance on
-                save_path = None,
-                save_name_affix = '',
-                pretrained_path = '/home/jupyter/gen4-dev/storage/gen4-models/pretrained-models'
-               ):
-    
-    """
-    Function that wraps training and evaluating together for multiclassification
-    Evaluate at the end of every epoch
-    
-    Input:
-        train: dataframe
-        val: dataframe
-        label_name: str -name of label column
-        text column
-        config
-    
-    Output:
-        best validation f1
-        best model name
-    """
-    
-    # getting config
-    lr = config['lr']
-    EPOCHS = config['epoch']
-    MAX_LEN = config['MAX_LEN']
-    BATCH_SIZE = config['BATCH_SIZE']
-    warmup_steps = config['warmup_steps']
-    weight_decay = config['weight_decay']
-    model_name = config['model_name']
-    
-    
-    # initialize tokenizer
-    tokenizer = BertTokenizer.from_pretrained(os.path.join(pretrained_path, model_name))
-    
-    # create data loaders on datasets
-    train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
-    val_data_loader = create_data_loader(df_val, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
-    
-    # initialize model
-    model=CustomBertMultiClassifier(model_name, pretrained_path, len(indexes_to_labels), device)
-    model = model.to(device)
-
-    ## training params
-    class_weight = []
-    sample = df_train[label_col].value_counts().to_dict() # full composition
-
-    for label in indexes_to_labels:
-        class_weight.append(max(sample.values()) / sample[label])
-    
-    optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
-    total_steps = len(train_data_loader) * EPOCHS
-    scheduler = get_linear_schedule_with_warmup(
-                                              optimizer,
-                                              num_warmup_steps=warmup_steps,
-                                              num_training_steps=total_steps
-    )
-
-    # boost of minority class weight
-    loss_fn = nn.CrossEntropyLoss(
-                                    weight = torch.tensor(class_weight).to(device)
-                                    ).to(device)
-    best_val_f1 = best_val_f1_global
-    best_model_name = None
-    binary = False
-    threshold = 0
-    
-    for epoch in range(EPOCHS):
-        print(f'Epoch {epoch + 1}/{EPOCHS}')
-        print('-' * 10)
-        
-
-        preds, trues, train_loss = train_epoch(
-                                                model,
-                                                train_data_loader,
-                                                loss_fn,
-                                                optimizer,
-                                                device,
-                                                scheduler,
-                                                threshold,
-                                                binary
-                                                )
-        
-        
-        if focused_indexes:
-            train_f1_all = f1_score(trues, preds, average = None)
-            print(train_f1_all[focused_indexes])
-            train_f1 = np.mean(train_f1_all[focused_indexes])
-        else:
-            train_f1 = f1_score(trues, preds, average = 'macro')
-
-        print(f'F1 Score{train_f1}  Avg loss {np.mean(train_loss)}  ')
-        print()
-        preds, preds_probas, trues, val_loss = eval_model(
-                                                model,
-                                                val_data_loader,
-                                                loss_fn,
-                                                device,
-                                                threshold,
-                                                binary
-                                                )
-        
-        
-        if focused_indexes:
-            val_f1_all = f1_score(trues, preds, average = None)
-            for index in focused_indexes:
-                print(f'{indexes_to_labels[index]}: F1 {val_f1_all[index]} ')
-            val_f1 = np.mean(val_f1_all[focused_indexes])
-            
-        else:
-            val_f1 = f1_score(trues, preds, average = 'macro')
-        
-        print('-'*30)
-        print(f'F1 Socre{val_f1}  Avg loss {np.mean(val_loss)} ')
-        print()
-        
-        if save_path:
-            if val_f1 > best_val_f1: # if f1 score better. save model checkpoint
-                
-                model_info = {
-                    'val_f1': val_f1,
-                    'val_loss': round(np.mean(val_loss), 4),
-                    'time_generated': datetime.now() 
-                }
-                
-                save_model(model, save_path, config, model_info)  
-                
-                
-                best_val_f1 = val_f1 # update best f1 score
-        
-         
-
-    return best_val_f1, best_model_name
-
-
 
 
 def train_multi_w_eval_steps(df_train, 
