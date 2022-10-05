@@ -816,7 +816,7 @@ def train_multi_w_eval_steps(
             class_weight[index] = class_weight[index] * float(boost)
  
     
-    optimizer = optim.AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     total_steps = len(train_data_loader) * EPOCHS
     scheduler = get_linear_schedule_with_warmup(
                                               optimizer,
