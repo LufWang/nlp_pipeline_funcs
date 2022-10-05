@@ -678,7 +678,7 @@ def train_binary(
                 running_train_loss = 0 # reset training loss               
 
                 # print out scores
-                print(f'Evaluation at Step {eval_steps[eval_ind]}....')
+                print(f'Evaluation at Step {global_step}....')
                 print(f'Val loss {round(val_loss, 3)} Val precision: {round(val_precision, 3)} recall: {round(val_recall, 3)}  f1: {round(val_f1, 3)}')
                 print()
                 
@@ -816,7 +816,7 @@ def train_multi_w_eval_steps(
             class_weight[index] = class_weight[index] * float(boost)
  
     
-    optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
     total_steps = len(train_data_loader) * EPOCHS
     scheduler = get_linear_schedule_with_warmup(
                                               optimizer,
@@ -855,8 +855,6 @@ def train_multi_w_eval_steps(
         # training through the train_data_loader
         for d in tqdm(train_data_loader):
             
-            global_step += 1
-
             model.train()
             input_ids = d["input_ids"].to(device)
             attention_mask = d["attention_mask"].to(device)
@@ -909,9 +907,7 @@ def train_multi_w_eval_steps(
                     
                     for index in focused_indexes:
                         print('#'*30)
-                        print(f'{indexes_to_labels[index]}: F1 {val_f1_all[index]} ')
-                        print(f'{indexes_to_labels[index]}: Precsion {val_precision_all[index]} ')
-                        print(f'{indexes_to_labels[index]}: Recall {val_recall_all[index]} ')
+                        print(f'{indexes_to_labels[index]}: F1 {round(val_f1_all[index], 3)}  Precsion {round(val_precision_all[index], 3)} Recall {round(val_recall_all[index], 3)}')
                         
                         val_f1_by_tree[indexes_to_labels[index]] = val_f1_all[index]
                         
@@ -949,8 +945,7 @@ def train_multi_w_eval_steps(
                             
                         }
                         
-                        save_model_v2(model, save_model_name, save_path, files )
-                        tokenizer.save_pretrained(save_path)
+                        save_model_v2(model, tokenizer, save_model_name, save_path, files  )
 
                         best_val_f1 = val_f1 # update best f1 score
 
@@ -959,8 +954,6 @@ def train_multi_w_eval_steps(
                 val_loss = np.mean(val_losses) # getting average val loss
                 val_losses_list.append(val_loss)
                 
-                train_loss = running_train_loss / eval_every # getting average train loss
-                train_losses_list.append(train_loss)
                 
                 running_train_loss = 0 # reset training loss               
      
@@ -976,7 +969,8 @@ def train_multi_w_eval_steps(
                             return None, None
                 
                     patience_count += 1
-        
+       
+        global_step += 1
         
         # evaluate train after every epoch
         if focused_indexes:
