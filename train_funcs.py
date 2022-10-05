@@ -594,7 +594,7 @@ def train_binary(
     total_evaluations = eval_freq * EPOCHS
     print(f'Total Training Steps: {total_steps}')
     eval_steps = [int(total_steps/total_evaluations) * i for i in range(1, total_evaluations)]
-    eval_steps.append(total_steps- 1)
+    eval_steps.append(total_steps)
 
 
     print('Evaluation Steps:', eval_steps)
@@ -602,10 +602,9 @@ def train_binary(
     
     binary = True  # doing binary classificaiton
     
-    global_step = 0
+    global_step = 1
     best_val_f1= best_val_f1_global # initialize best val f1
     val_losses_list = [] # record val loss every eval step -> for early stopping
-    train_losses_list = []
     running_train_loss = 0
     patience_count = 0
     val_f1_list = []
@@ -625,8 +624,6 @@ def train_binary(
         # training through the train_data_loader
         for d in tqdm(train_data_loader):
             
-            
-
             model.train()
 
             input_ids = d["input_ids"].to(device)
@@ -675,14 +672,14 @@ def train_binary(
                 
                 val_loss = np.mean(val_losses) # getting average val loss
                 val_losses_list.append(val_loss)
-                train_loss = running_train_loss / (eval_steps[eval_ind] - eval_steps[eval_ind-1]) # getting average train loss
-                train_losses_list.append(train_loss)
+                # train_loss = running_train_loss / (eval_steps[eval_ind] - eval_steps[eval_ind-1]) # getting average train loss
+                # train_losses_list.append(train_loss)
                 
                 running_train_loss = 0 # reset training loss               
 
                 # print out scores
                 print(f'Evaluation at Step {eval_steps[eval_ind]}....')
-                print(f'Train loss {round(train_loss, 3)} || Val loss {round(val_loss, 3)} Val precision: {val_precision} recall: {val_recall}  f1: {val_f1}')
+                print(f'Val loss {round(val_loss, 3)} Val precision: {round(val_precision, 3)} recall: {round(val_recall, 3)}  f1: {round(val_f1, 3)}')
                 print()
                 
                 eval_ind += 1
@@ -697,8 +694,6 @@ def train_binary(
                     patience_count += 1
                 
 
-                
-                
                 # if new best validation f1 save model
                 if val_f1 > best_val_f1:             
                     
@@ -733,7 +728,9 @@ def train_binary(
     
 
 
-def train_multi_w_eval_steps(df_train, 
+def train_multi_w_eval_steps(
+                            model,
+                            df_train, 
                             df_val, 
                             label_col,
                             text_col,
@@ -743,7 +740,7 @@ def train_multi_w_eval_steps(df_train,
                             save_model_name,
                             labels_to_indexes,
                             indexes_to_labels, 
-                            eval_every = 500,
+                            eval_freq,
                             early_stopping = 10,
                             focused_indexes = None,
                             save_path = None,
@@ -796,16 +793,16 @@ def train_multi_w_eval_steps(df_train,
     val_data_loader = create_data_loader(df_val, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
     
     # initialize model
-    model=CustomBertMultiClassifier(model_name, pretrained_path, len(indexes_to_labels), device)
-    model = model.to(device)
+    # model=CustomBertMultiClassifier(model_name, pretrained_path, len(indexes_to_labels), device)
+    # model = model.to(device)
     
     # get list eval steps 
-    total_steps = len(train_data_loader) * EPOCHS
+    epoch_steps = len(train_data_loader)
+    total_steps = epoch_steps * EPOCHS
+    total_evaluations = eval_freq * EPOCHS
     print(f'Total Training Steps: {total_steps}')
-    eval_steps = [x * eval_every for x in range(1, int(total_steps / eval_every) + 1)]
-    if eval_steps[-1] != total_steps:
-        eval_steps.append(total_steps)
-    print('Evaluation Steps:', eval_steps)
+    eval_steps = [int(total_steps/total_evaluations) * i for i in range(1, total_evaluations)]
+    eval_steps.append(total_steps)
     
 
     ## assigning weights to each label class to account for imbalance
@@ -836,7 +833,7 @@ def train_multi_w_eval_steps(df_train,
     binary = False
     threshold = 0
     
-    global_step = 0
+    global_step = 1
     eval_ind = 0
     val_losses_list = [] # record val loss every eval step -> for early stopping
     train_losses_list = []
