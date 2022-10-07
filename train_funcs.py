@@ -458,6 +458,8 @@ def eval_model_detailed(model, data_loader, loss_fn, device, threshold = 0.5, bi
 def save_model_v2(model, tokenizer, model_name, save_path, files):
     """
     model - model
+    tokenizer - tokenizer intialized using transformer
+    model_name - str: name of the saved directory
     save_path - path
     files - dict of files with key to be names and values to be files to be saved in the same directory, have to be all json files
     """
@@ -488,8 +490,6 @@ def save_model_v2(model, tokenizer, model_name, save_path, files):
             json.dump(files[file_name], f, ensure_ascii=False, indent=4)
 
 
-        
-
     print('Model Files Saved.')
     print()
 
@@ -504,8 +504,12 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list):
     for metric_name in metrics_list:
         metric_func = metrics_list[metric_name]
         score = metric_func(y_true, y_pred)
-        print(f'{metric_name}: {round(score, 3)}')
-        results[metric_name] = round(score, 5)
+        if metric_name == 'confusion_matrix':
+            print(f'{metric_name}: {score}')
+            score = list(score)
+        else:
+            print(f'{metric_name}: {round(score, 3)}')
+            results[metric_name] = round(score, 5)
 
     return results
 
@@ -526,7 +530,8 @@ def train_binary(
                  metrics_list = {
                     "f1": f1_score,
                     "precision": precision_score,
-                    "recall": recall_score
+                    "recall": recall_score,
+                    "confusion_matrix": confusion_matrix
                  }):
     
     """
@@ -534,15 +539,20 @@ def train_binary(
     # saving model based on val loss each eval step
     
     Input:
+        model
         df_train
         df_val
         label col name
         text col
         config dictionary
         decision threshold
-        best val f1 global
+        best val score global
         device
-        seed
+        evaluate frequency
+        early stopping
+        save_path
+        save metric
+        metrics_list
     
 
     """
@@ -587,8 +597,6 @@ def train_binary(
     print(f'Total Training Steps: {total_steps}')
     eval_steps = [int(total_steps/total_evaluations) * i for i in range(1, total_evaluations)]
     eval_steps.append(total_steps)
-
-
     print('Evaluation Steps:', eval_steps)
     eval_ind = 0
     
@@ -729,8 +737,7 @@ def train_multi_w_eval_steps(
                             eval_freq,
                             early_stopping = 10,
                             focused_indexes = None,
-                            save_path = None,
-                            pretrained_path = '/home/jupyter/gen4-dev/storage/gen4-models/pretrained-models'
+                            save_path = None
                            ):
     
     """
