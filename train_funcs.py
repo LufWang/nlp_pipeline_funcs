@@ -38,8 +38,17 @@ def get_config(params):
     
     for name in params:
         choice = np.random.choice(params[name])
+
+        if type(choice) == np.int64:
+            choice = int(choice)
+        elif type(choice) == np.float64:
+            choice= float(choice)
+        elif type(choice) == np.str_:
+            choice = str(choice)
+
         config[name] = choice
-        
+    
+
     
     return config
         
@@ -444,44 +453,13 @@ def eval_model_detailed(model, data_loader, loss_fn, device, threshold = 0.5, bi
     
     return texts_l, preds_l, preds_probas_l, true_labels_l, preds_probas_all_l
 
-def save_model(model, save_path, config, model_info, model_name,labels_to_indexes, indexes_to_labels):
-                    
-    print('Saving Model...')
     
-    # generate ID
-    model_id = shortuuid.ShortUUID().random(length=12)
-                    
-    if not os.path.isdir(save_path):
-        os.mkdir(save_path) # create directory if not exist
 
-    # change here 
-    save_path_final = os.path.join(save_path, model_id + '|' + model_name)
-
-    if not os.path.isdir(save_path_final):
-        os.mkdir(save_path_final) # create directory for model if not exist
-
-    torch.save(model.state_dict(), os.path.join(save_path_final, model_id + '|' + 'model.bin'))  # save model
-
-    with open(os.path.join(save_path_final, model_id + '|' + 'labels_to_indexes.pickle'), 'wb') as handle:
-        pickle.dump(labels_to_indexes, handle, protocol=pickle.HIGHEST_PROTOCOL) # save label to index map
-
-    with open(os.path.join(save_path_final, model_id + '|' + 'indexes_to_labels.pickle'), 'wb') as handle:
-        pickle.dump(indexes_to_labels, handle, protocol=pickle.HIGHEST_PROTOCOL) # save index to label map
-                        
-    with open(os.path.join(save_path_final, model_id + '|' + 'config.pickle'), 'wb') as f:
-        pickle.dump(config, f, protocol=pickle.HIGHEST_PROTOCOL)
-                    
-    with open(os.path.join(save_path_final, model_id + '|' + 'model_info.json'), 'w', encoding='utf-8') as f:
-        json.dump(model_info, f, ensure_ascii=False, indent=4)
-
-    print('Model Files Saved.')
-    print()
-    
 def save_model_v2(model, tokenizer, model_name, save_path, files):
     """
     model - model
     save_path - path
-    files - dict of files with key to be names and values to be files to be saved in the same directory
+    files - dict of files with key to be names and values to be files to be saved in the same directory, have to be all json files
     """
                     
     print('Saving Model...')
@@ -493,26 +471,21 @@ def save_model_v2(model, tokenizer, model_name, save_path, files):
         os.mkdir(save_path) # create directory if not exist
 
     # change here 
-    save_path_final = os.path.join(save_path, model_id + '|' + model_name)
+    save_path_final = os.path.join(save_path, model_id + '-' + model_name)
 
     if not os.path.isdir(save_path_final):
         os.mkdir(save_path_final) # create directory for model if not exist
     
     # save torch model
-    torch.save(model.state_dict(), os.path.join(save_path_final, model_id + '|' + 'model.bin'))  # save model
+    torch.save(model.state_dict(), os.path.join(save_path_final, model_id + '-' + 'model.bin'))  # save model
 
     # save tokenizer
     tokenizer.save_pretrained(save_path_final)
     
     # save file in the files
     for file_name in files:
-        if file_name == 'model_info.json':
-            with open(os.path.join(save_path_final, model_id + '|' + file_name), 'w', encoding='utf-8') as f:
-                json.dump(files[file_name], f, ensure_ascii=False, indent=4)
-                
-        else:
-            with open(os.path.join(save_path_final, model_id + '|' + file_name), 'wb') as f:
-                pickle.dump(files[file_name], f, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(os.path.join(save_path_final, model_id + '-' + file_name), 'w', encoding='utf-8') as f:
+            json.dump(files[file_name], f, ensure_ascii=False, indent=4)
 
 
         
@@ -520,7 +493,22 @@ def save_model_v2(model, tokenizer, model_name, save_path, files):
     print('Model Files Saved.')
     print()
 
-    
+
+def evaluate_by_metrics(y_true, y_pred, metrics_list):
+
+    """
+    Helper function that prints out and save a list of metrics defined by the user
+    """
+
+    results = {}
+    for metric_name in metrics_list:
+        metric_func = metrics_list[metric_name]
+        score = metric_func(y_true, y_pred)
+        print(f'{metric_name}: {round(score, 3)}')
+        results[metric_name] = round(score, 5)
+
+    return results
+
 def train_binary(
                  model,
                  df_train, 
@@ -529,11 +517,17 @@ def train_binary(
                  text_col, 
                  config, 
                  threshold,
-                 best_val_f1_global,
+                 best_val_score_global,
                  device, 
                  eval_freq, # evaluation frequency per epoch
                  early_stopping,
-                 save_path):
+                 save_path,
+                 save_metric = f1_score,
+                 metrics_list = {
+                    "f1": f1_score,
+                    "precision": precision_score,
+                    "recall": recall_score
+                 }):
     
     """
     Function that wraps training and evaluating together using bce loss
@@ -556,7 +550,6 @@ def train_binary(
     # getting config
     lr = config['lr']
     EPOCHS = config['epoch']
-    boost = config['boost']
     MAX_LEN = config['MAX_LEN']
     BATCH_SIZE = config['BATCH_SIZE']
     weight_decay = config['weight_decay']
@@ -564,7 +557,6 @@ def train_binary(
     
     # create tokenizer
     tokenizer = BertTokenizer.from_pretrained(pretrained_path)
-    
     
     # getting ratio for pos_weight
     RATIO = df_train[df_train[label_name] == 0].shape[0] / df_train[df_train[label_name] == 1].shape[0]
@@ -584,7 +576,7 @@ def train_binary(
 
     # loss function for binary classification
     loss_fn = nn.BCEWithLogitsLoss(
-                                    pos_weight = torch.tensor(RATIO * boost)
+                                    pos_weight = torch.tensor(RATIO )
                                     ).to(device)
     
     
@@ -603,11 +595,11 @@ def train_binary(
     binary = True  # doing binary classificaiton
     
     global_step = 1
-    best_val_f1= best_val_f1_global # initialize best val f1
+    best_val_score= best_val_score_global # initialize best score ## needs to be the score returned by function in save_metric
     val_losses_list = [] # record val loss every eval step -> for early stopping
     running_train_loss = 0
     patience_count = 0
-    val_f1_list = []
+    val_scores_list = []
     
     
     # start training
@@ -665,21 +657,17 @@ def train_binary(
                                                                                 threshold,
                                                                                 binary
                                                                                 )
-                val_f1 = f1_score(val_trues, val_preds)
-                val_precision = precision_score(val_trues, val_preds, zero_division = 0)
-                val_recall = recall_score(val_trues, val_preds, zero_division = 0)
-                val_f1_list.append(val_f1)
                 
                 val_loss = np.mean(val_losses) # getting average val loss
                 val_losses_list.append(val_loss)
-                # train_loss = running_train_loss / (eval_steps[eval_ind] - eval_steps[eval_ind-1]) # getting average train loss
-                # train_losses_list.append(train_loss)
-                
-                running_train_loss = 0 # reset training loss               
 
                 # print out scores
                 print(f'Evaluation at Step {global_step}....')
-                print(f'Val loss {round(val_loss, 3)} Val precision: {round(val_precision, 3)} recall: {round(val_recall, 3)}  f1: {round(val_f1, 3)}')
+                print(f'Val loss {round(val_loss, 3)}')
+                eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list)
+                val_score = save_metric(val_trues, val_preds)
+
+                val_scores_list.append(val_score)
                 print()
                 
                 eval_ind += 1
@@ -687,35 +675,33 @@ def train_binary(
                 # check if needed to be early stopped:
                 if early_stopping:
                     if patience_count > early_stopping:
-                        if val_f1_list[-1] > val_f1_list[-(early_stopping + 1)]:
+                        if val_scores_list[-1] > val_scores_list[-(early_stopping + 1)]:
                             print('Early Stopping..')
-                            return val_f1_list
+                            return val_scores_list
 
                     patience_count += 1
                 
 
                 # if new best validation f1 save model
-                if val_f1 > best_val_f1:             
+                if val_score > best_val_score:             
                     
                     if not os.path.isdir(save_path):
                         os.mkdir(save_path) # create directory for models if not existt
+
+                    eval_results['val_loss'] = round(val_loss, 5)
+                    eval_results['label_name'] = label_name
+
                         
                     files = {
-                        'config.pickle': config ,
-                        'model_info.json': {
-                            'val_precision': round(val_precision, 3),
-                            'val_recall': round (val_recall, 3),
-                            'val_f1': round(val_f1, 3),
-                            'val_loss': round(val_loss, 5),
-                            'label_name': label_name
-                        }
+                        'config.json': config ,
+                        'model_info.json': eval_results
                     }
                     
                     
                     save_model_v2(model, tokenizer, label_name, save_path, files)
 
                     # updating scores
-                    best_val_f1 = val_f1
+                    best_val_score = val_score
                     patience_count = 0 # reset early stopping patience count if a model saved
 
             global_step += 1    
@@ -724,7 +710,7 @@ def train_binary(
         
             
                 
-    return val_f1_list, best_val_f1
+    return val_scores_list, best_val_score
     
 
 
@@ -744,7 +730,6 @@ def train_multi_w_eval_steps(
                             early_stopping = 10,
                             focused_indexes = None,
                             save_path = None,
-                            save_name_affix = '',
                             pretrained_path = '/home/jupyter/gen4-dev/storage/gen4-models/pretrained-models'
                            ):
     
@@ -767,7 +752,6 @@ def train_multi_w_eval_steps(
         early_stopping: int - how many evals to wait before terminate (if val metric does not improve)
         focused_indexes: list - indexes of labels to focuse on (if passed in will save based on these focused labels only)
         save_path: path (will create if not exist)
-        save_name_affix: str - append anything passed in to the end of model name
         pretrained_path: path - path to the pretrained model to use 
     
     Output:
@@ -792,9 +776,6 @@ def train_multi_w_eval_steps(
     train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
     val_data_loader = create_data_loader(df_val, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
     
-    # initialize model
-    # model=CustomBertMultiClassifier(model_name, pretrained_path, len(indexes_to_labels), device)
-    # model = model.to(device)
     
     # get list eval steps 
     epoch_steps = len(train_data_loader)
@@ -932,8 +913,8 @@ def train_multi_w_eval_steps(
                                 'val_f1': val_f1,
                                 'val_loss': float(np.round(np.mean(val_losses), 4)),
                                 'time_generated': datetime.now().strftime("%m/%d/%Y, %H:%M:%S"),
-                                'focused_DTREES':  [indexes_to_labels[x]for x in focused_indexes] if focused_indexes  else [],
-                                'val_f1_by_dtree': val_f1_by_tree
+                                'focused_labels':  [indexes_to_labels[x]for x in focused_indexes] if focused_indexes  else [],
+                                'val_f1_by_label': val_f1_by_tree
                             }
                 
                         # save_model(model, save_path, config, model_info, save_model_name, labels_to_indexes, indexes_to_labels)  
