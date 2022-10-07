@@ -505,7 +505,8 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list):
         metric_func = metrics_list[metric_name]
         score = metric_func(y_true, y_pred)
         if metric_name == 'confusion_matrix':
-            print(f'{metric_name}: {score}')
+            print(f'{metric_name}')
+            print(score)
             score = list(score)
         else:
             print(f'{metric_name}: {round(score, 3)}')
