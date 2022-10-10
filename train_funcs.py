@@ -494,7 +494,7 @@ def save_model_v2(model, tokenizer, model_name, save_path, files):
     print()
 
 
-def evaluate_by_metrics(y_true, y_pred, metrics_list):
+def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', print_out = True):
 
     """
     Helper function that prints out and save a list of metrics defined by the user
@@ -503,13 +503,17 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list):
     results = {}
     for metric_name in metrics_list:
         metric_func = metrics_list[metric_name]
-        score = metric_func(y_true, y_pred)
         if metric_name == 'confusion_matrix':
-            print(f'{metric_name}')
-            print(score)
+            score = metric_func(y_true, y_pred)
+            if print_out:
+                print(f'{metric_name}')
+                print(score)
             score = list(score)
+            results[metric_name] = score
         else:
-            print(f'{metric_name}: {round(score, 3)}')
+            score = metric_func(y_true, y_pred, average=average)
+            if print_out:
+                print(f'{metric_name}: {round(score, 3)}')
             results[metric_name] = round(score, 5)
 
     return results
@@ -730,7 +734,7 @@ def train_multi_w_eval_steps(
                             label_col,
                             text_col,
                             config,
-                            best_val_f1_global,
+                            best_val_score_global,
                             device, 
                             save_model_name,
                             labels_to_indexes,
@@ -738,7 +742,11 @@ def train_multi_w_eval_steps(
                             eval_freq,
                             early_stopping = 10,
                             focused_indexes = None,
-                            save_path = None
+                            save_path = None,
+                            save_metric = f1_score,
+                            metrics_list = {
+                                        "f1": f1_score
+                                     }
                            ):
     
     """
@@ -800,7 +808,7 @@ def train_multi_w_eval_steps(
 
     for label in indexes_to_labels:
         class_weight.append(max(sample.values()) / sample[label])
-    if focused_indexes: # if focused index boost them
+    if focused_indexes: # if focused index boost their weights 
         for index in focused_indexes:
             class_weight[index] = class_weight[index] * float(boost)
  
@@ -817,7 +825,7 @@ def train_multi_w_eval_steps(
     loss_fn = nn.CrossEntropyLoss(
                                     weight = torch.tensor(class_weight).to(device)
                                     ).to(device)
-    best_val_f1 = best_val_f1_global
+    best_val_score = best_val_score_global
     best_model_name = None
     binary = False
     threshold = 0
@@ -825,10 +833,9 @@ def train_multi_w_eval_steps(
     global_step = 1
     eval_ind = 0
     val_losses_list = [] # record val loss every eval step -> for early stopping
-    train_losses_list = []
     running_train_loss = 0
     patience_count = 0
-    val_f1_list = []
+    val_score_list = []
     
     for epoch in range(EPOCHS):
         print()
@@ -879,7 +886,7 @@ def train_multi_w_eval_steps(
                 
                 print()
                 print(f'Evaluateing at Step {global_step}....')
-                preds, preds_probas, trues, val_losses = eval_model(
+                val_preds, val_preds_probas, val_trues, val_losses = eval_model(
                                                                      model,
                                                                      val_data_loader,
                                                                      loss_fn,
@@ -887,96 +894,79 @@ def train_multi_w_eval_steps(
                                                                      threshold,
                                                                      binary
                                                                                     )
-                val_f1_by_tree = {}
+                val_f1_by_label = {}
                 if focused_indexes:
-                    val_f1_all = f1_score(trues, preds, average = None)
-                    val_precision_all = precision_score(trues, preds, average = None, zero_division=0)
-                    val_recall_all = recall_score(trues, preds, average = None)
+                    # val_f1_all = f1_score(trues, preds, average = None)
+                    # val_precision_all = precision_score(trues, preds, average = None, zero_division=0)
+                    # val_recall_all = recall_score(trues, preds, average = None)
+                    eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = None, print_out=False)
+                    val_score_all = save_metric(val_trues, val_preds, average=None)
+
                     
                     
                     for index in focused_indexes:
                         print('#'*30)
-                        print(f'{indexes_to_labels[index]}: F1 {round(val_f1_all[index], 3)}  Precsion {round(val_precision_all[index], 3)} Recall {round(val_recall_all[index], 3)}')
+                        for metric_name in eval_results:
+                            print(f'{metric_name}:  {round(eval_results[metric_name][index], 3)}')
                         
-                        val_f1_by_tree[indexes_to_labels[index]] = val_f1_all[index]
+                        val_f1_by_label[indexes_to_labels[index]] = eval_results['f1_score'][index]
                         
                         
-                    val_f1 = np.mean(val_f1_all[focused_indexes])
+                    val_score = np.mean(val_score_all[focused_indexes])
 
                 else:
-                    val_f1 = f1_score(trues, preds, average = 'macro')
+                    eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = 'macro', print_out=True)
+                    val_score = save_metric(val_trues, val_preds, average = 'macro')
                 
-                print('-'*30)
-                print(f'F1 Socre: {val_f1}  Avg loss: {np.mean(val_losses)} ')
-                print()
                 
                 if save_path:  # if a save path is provided, save model
             
-                    if val_f1 > best_val_f1: # if f1 score better. save model checkpoint
+                    if val_score > best_val_score: # if f1 score better. save model checkpoint
                         if not os.path.isdir(save_path):
                             os.mkdir(save_path) # create directory if not exist
                         
                         
                         model_info = {
-                                'val_f1': val_f1,
+                                'val_score': val_score,
                                 'val_loss': float(np.round(np.mean(val_losses), 4)),
                                 'time_generated': datetime.now().strftime("%m/%d/%Y, %H:%M:%S"),
                                 'focused_labels':  [indexes_to_labels[x]for x in focused_indexes] if focused_indexes  else [],
-                                'val_f1_by_label': val_f1_by_tree
+                                'val_f1_by_focused_label': val_f1_by_label
                             }
                 
-                        # save_model(model, save_path, config, model_info, save_model_name, labels_to_indexes, indexes_to_labels)  
                         files = {
-                            'config.pickle': config,
+                            'config.json': config,
                             'model_info.json': model_info,
-                            'labels_to_indexes.pickle': labels_to_indexes,
-                            'indexes_to_labels.pickle': indexes_to_labels
+                            'labels_to_indexes.json': labels_to_indexes,
+                            'indexes_to_labels.json': indexes_to_labels
                             
                         }
                         
                         save_model_v2(model, tokenizer, save_model_name, save_path, files  )
 
-                        best_val_f1 = val_f1 # update best f1 score
+                        best_val_score = val_score # update best f1 score
 
                 
-                val_f1_list.append(val_f1)          
+                val_score_list.append(val_score)          
                 val_loss = np.mean(val_losses) # getting average val loss
                 val_losses_list.append(val_loss)
                 
                 
-                running_train_loss = 0 # reset training loss               
-     
-                # print(f'Running Train loss {train_loss} Val loss {val_loss}')
-
-                
                 # check if needed to be early stopped:
                 if early_stopping:
                     if patience_count > early_stopping:
-                        if val_f1_list[-1] > val_f1_list[-(early_stopping + 1)]:
+                        if val_score_list[-1] > val_score_list[-(early_stopping + 1)]:
                             print('Early Stopping..')
-                            print('Val F1 List: ', val_f1_list)
+                            print('Val F1 List: ', val_score_list)
                             return None, None
                 
                     patience_count += 1
        
         global_step += 1
         
-        # evaluate train after every epoch
-        if focused_indexes:
-            train_f1_all = f1_score(train_true_labels_l, train_preds_l, average = None)
-            print(train_f1_all[focused_indexes])
-            train_f1 = np.mean(train_f1_all[focused_indexes])
-        else:
-            train_f1 = f1_score(trues, preds, average = 'macro')
-        
-        print('-'*50)
-        print(f'End of Epoch: Train F1 Score{train_f1}  Train Avg loss {np.mean(losses)}  ')
-        print('-'*50)
-        print()
+  
 
-         
-
-    return best_val_f1, best_model_name
+    return best_val_score, best_model_name
 
 
 
