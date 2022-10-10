@@ -786,7 +786,7 @@ def train_multi_w_eval_steps(
     
     print(pretrained_path)
     # initialize tokenizer
-    tokenizer = BertTokenizer.from_pretrained(os.path.join(pretrained_path, model_name))
+    tokenizer = BertTokenizer.from_pretrained(pretrained_path)
     
     # create data loaders on datasets
     train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
