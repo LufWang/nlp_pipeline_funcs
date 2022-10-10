@@ -768,7 +768,6 @@ def train_multi_w_eval_steps(
         early_stopping: int - how many evals to wait before terminate (if val metric does not improve)
         focused_indexes: list - indexes of labels to focuse on (if passed in will save based on these focused labels only)
         save_path: path (will create if not exist)
-        pretrained_path: path - path to the pretrained model to use 
     
     Output:
         best validation f1
@@ -785,6 +784,7 @@ def train_multi_w_eval_steps(
     model_name = config['model_name']
     boost = config['boost']
     
+    print(pretrained_path)
     # initialize tokenizer
     tokenizer = BertTokenizer.from_pretrained(os.path.join(pretrained_path, model_name))
     
