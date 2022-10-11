@@ -514,7 +514,8 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', print_
             score = metric_func(y_true, y_pred, average=average)
             if print_out:
                 print(f'{metric_name}: {round(score, 3)}')
-            results[metric_name] = round(score, 5)
+            
+            results[metric_name] = score
 
     return results
 
@@ -897,13 +898,9 @@ def train_multi_w_eval_steps(
                                                                                     )
                 val_f1_by_label = {}
                 if focused_indexes:
-                    # val_f1_all = f1_score(trues, preds, average = None)
-                    # val_precision_all = precision_score(trues, preds, average = None, zero_division=0)
-                    # val_recall_all = recall_score(trues, preds, average = None)
+
                     eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = None, print_out=False)
                     val_score_all = save_metric(val_trues, val_preds, average=None)
-
-                    
                     
                     for index in focused_indexes:
                         print('#'*30)
