@@ -513,7 +513,7 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', print_
             score = list(score)
             results[metric_name] = score
         else:
-            score = metric_func(y_true, y_pred, average=average)
+            score = metric_func(y_true, y_pred, average=average, zero_division=0)
             if print_out:
                 print(f'{metric_name}: {round(score, 3)}')
             
@@ -681,7 +681,7 @@ def train_binary(
                 print(f'Evaluation at Step {global_step}....')
                 print(f'Val loss {round(val_loss, 3)}')
                 eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list)
-                val_score = save_metric(val_trues, val_preds)
+                val_score = save_metric(val_trues, val_preds, zero_devision=0)
 
                 val_scores_list.append(val_score)
                 print()
@@ -903,7 +903,7 @@ def train_multi_w_eval_steps(
                 if focused_indexes:
 
                     eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = None, print_out=False)
-                    val_score_all = save_metric(val_trues, val_preds, average=None)
+                    val_score_all = save_metric(val_trues, val_preds, average=None, zero_division=0)
                     
                     # print out scores to console
                     data_all = []
@@ -918,7 +918,9 @@ def train_multi_w_eval_steps(
                         data_all.append(data)
                         val_f1_by_label[indexes_to_labels[index]] = round(eval_results['f1_score'][index], 3)
                     
+                    print()
                     print(tabulate(data_all, headers=['Label'] + list(eval_results.keys())))
+                    print()
                         
                         
                     val_score = np.mean(val_score_all[focused_indexes])
@@ -927,7 +929,10 @@ def train_multi_w_eval_steps(
                     eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = 'macro', print_out=True)
                     val_score = save_metric(val_trues, val_preds, average = 'macro')
                 
-                
+                print(f'Overall Score: {val_score}')
+                print()
+
+
                 if save_path:  # if a save path is provided, save model
             
                     if val_score > best_val_score: # if f1 score better. save model checkpoint
