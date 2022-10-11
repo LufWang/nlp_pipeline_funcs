@@ -800,6 +800,7 @@ def train_multi_w_eval_steps(
     print(f'Total Training Steps: {total_steps}')
     eval_steps = [int(total_steps/total_evaluations) * i for i in range(1, total_evaluations)]
     eval_steps.append(total_steps)
+    print(f'Eval at steps: {eval_steps}')
     
 
     ## assigning weights to each label class to account for imbalance
@@ -962,7 +963,8 @@ def train_multi_w_eval_steps(
                 
                     patience_count += 1
        
-        global_step += 1
+            
+            global_step += 1
         
   
 
