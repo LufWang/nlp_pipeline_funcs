@@ -29,6 +29,8 @@ from datetime import datetime
 import json
 import shortuuid
 from nlp_pipeline_funcs.config import pretrained_path
+from tabulate import tabulate
+
 
 
 
@@ -897,17 +899,26 @@ def train_multi_w_eval_steps(
                                                                      binary
                                                                                     )
                 val_f1_by_label = {}
+                
                 if focused_indexes:
 
                     eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = None, print_out=False)
                     val_score_all = save_metric(val_trues, val_preds, average=None)
                     
+                    # print out scores to console
+                    data_all = []
                     for index in focused_indexes:
-                        print('#'*30)
+                        data = []
+                        label_name = indexes_to_labels[index]
+                        data.append(label_name)
                         for metric_name in eval_results:
-                            print(f'{metric_name}:  {round(eval_results[metric_name][index], 3)}')
+                            score = round(eval_results[metric_name][index], 3)
+                            data.append(score)
                         
-                        val_f1_by_label[indexes_to_labels[index]] = eval_results['f1_score'][index]
+                        data_all.append(data)
+                        val_f1_by_label[indexes_to_labels[index]] = round(eval_results['f1_score'][index], 3)
+                    
+                    print(tabulate(data_all, headers=['Label'] + list(eval_results.keys())))
                         
                         
                     val_score = np.mean(val_score_all[focused_indexes])
