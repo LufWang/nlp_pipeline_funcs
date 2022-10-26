@@ -683,7 +683,7 @@ def train_binary(
                 print(f'Evaluation at Step {global_step}....')
                 print(f'Val loss {round(val_loss, 3)}')
                 eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list)
-                val_score = save_metric(val_trues, val_preds, zero_devision=0)
+                val_score = save_metric(val_trues, val_preds, zero_division=0)
 
                 val_scores_list.append(val_score)
                 print()
