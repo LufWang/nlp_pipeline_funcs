@@ -496,28 +496,30 @@ def save_model_v2(model, tokenizer, model_name, save_path, files):
     print()
 
 
-def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', print_out = True):
+def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', verbose = True):
 
     """
     Helper function that prints out and save a list of metrics defined by the user
     """
 
     results = {}
+    output_str = ''
+
     for metric_name in metrics_list:
         metric_func = metrics_list[metric_name]
-        if metric_name == 'confusion_matrix':
-            score = metric_func(y_true, y_pred)
-            if print_out:
-                print(f'{metric_name}')
-                print(score)
-            score = list(score)
-            results[metric_name] = score
-        else:
+
+        if metric_name != 'confusion_matrix':
             score = metric_func(y_true, y_pred, average=average, zero_division=0)
-            if print_out:
-                print(f'{metric_name}: {round(score, 3)}')
-            
-            results[metric_name] = score
+            output_str += f'| {metric_name}: {round(score, 3)} '
+        else:
+            score = metric_func(y_true, y_pred)
+            output_str += f'| {metric_name}: {score.tolist()} '
+
+
+        results[metric_name] = score
+    
+    if verbose:
+        print(output_str)
 
     return results
 
@@ -1067,3 +1069,17 @@ def predict_multi_cohort(df, text_col, label_col, model, tokenizer, MAX_LEN, dev
 
 
 
+####
+# Helper functions
+#####
+def model_selection(path):
+    model_names = os.listdir(path)
+
+    for name in model_names:
+        model_id = name.split('-')[0]
+        model_info = json.load(open(f'{path}/{name}/{model_id}-model_info.json'))
+        print(name)
+        print(model_info)
+        print()
+
+    
