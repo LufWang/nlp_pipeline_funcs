@@ -508,12 +508,14 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', verbos
     for metric_name in metrics_list:
         metric_func = metrics_list[metric_name]
 
-        if metric_name != 'confusion_matrix':
+        if metric_name == 'confusion_matrix':
+            score = metric_func(y_true, y_pred)
+            score = score.tolist()
+            output_str += f'| {metric_name}: {score} '
+
+        else:
             score = metric_func(y_true, y_pred, average=average, zero_division=0)
             output_str += f'| {metric_name}: {round(score, 3)} '
-        else:
-            score = metric_func(y_true, y_pred)
-            output_str += f'| {metric_name}: {score.tolist()} '
 
 
         results[metric_name] = score
