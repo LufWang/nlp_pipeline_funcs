@@ -930,7 +930,7 @@ def train_multi_w_eval_steps(
                     val_score = np.mean(val_score_all[focused_indexes])
 
                 else:
-                    eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = 'macro', print_out=True)
+                    eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = 'macro', verbose=True)
                     val_score = save_metric(val_trues, val_preds, average = 'macro')
                 
                 print(f'Overall Score: {val_score}')
