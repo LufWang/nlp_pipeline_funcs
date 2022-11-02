@@ -906,7 +906,7 @@ def train_multi_w_eval_steps(
                 
                 if focused_indexes:
 
-                    eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = None, print_out=False)
+                    eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = None, verbose=False)
                     val_score_all = save_metric(val_trues, val_preds, average=None, zero_division=0)
                     
                     # print out scores to console
