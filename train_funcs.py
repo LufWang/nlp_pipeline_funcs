@@ -513,12 +513,18 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', verbos
             score = score.tolist()
             output_str += f'| {metric_name}: {score} '
 
+            results[metric_name] = score
+
         else:
             score = metric_func(y_true, y_pred, average=average, zero_division=0)
-            output_str += f'| {metric_name}: {round(score, 3)} '
+            results[metric_name] = score
+            
+            if type(score) == float:
+                score = round(score, 4)
+
+            output_str += f'| {metric_name}: {score} '
 
 
-        results[metric_name] = score
     
     if verbose:
         print(output_str)
