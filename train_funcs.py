@@ -740,7 +740,8 @@ def train_binary(
     
 
 
-def train_multi(df_train, 
+def train_multi(model,
+                df_train, 
                 df_val, 
                 label_col,
                 text_col,
@@ -789,10 +790,6 @@ def train_multi(df_train,
     # create data loaders on datasets
     train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
     val_data_loader = create_data_loader(df_val, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
-
-    # initialize model
-    model=CustomBertMultiClassifier(pretrained_path, len(indexes_to_labels), device)
-    model = model.to(device)
 
     ## training params
     class_weight = []
