@@ -743,14 +743,13 @@ def train_binary(
 def train_multi(model,
                 df_train, 
                 df_val, 
+                tokenizer,
                 label_col,
                 text_col,
                 config,
                 device, 
-                labels_to_indexes,
                 indexes_to_labels,
                 focused_indexes = None,
-                pretrained_path = '/home/jupyter/gen4-dev/storage/gen4-models/pretrained-models',
                 eval_func = f1_score
 
                ):
@@ -785,7 +784,7 @@ def train_multi(model,
 
 
     # initialize tokenizer
-    tokenizer = BertTokenizer.from_pretrained(os.path.join(pretrained_path, model_name))
+    # tokenizer = BertTokenizer.from_pretrained(os.path.join(pretrained_path, model_name))
 
     # create data loaders on datasets
     train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
