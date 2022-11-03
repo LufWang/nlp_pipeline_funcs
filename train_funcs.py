@@ -740,6 +740,141 @@ def train_binary(
     
 
 
+def train_multi(df_train, 
+                df_val, 
+                label_col,
+                text_col,
+                config,
+                device, 
+                labels_to_indexes,
+                indexes_to_labels,
+                focused_indexes = None,
+                pretrained_path = '/home/jupyter/gen4-dev/storage/gen4-models/pretrained-models',
+                eval_func = f1_score
+
+               ):
+    
+    """
+    Function that wraps training and evaluating together for multiclassification
+    mainly used for cross validation
+    does not checkpoint model
+
+    Input:
+        train: dataframe
+        val: dataframe
+        label_name: str -name of label column
+        text column
+        config
+
+    Output:
+        best validation f1
+        best model name
+    """
+
+    # getting config
+    lr = config['lr']
+    EPOCHS = config['epoch']
+    MAX_LEN = config['MAX_LEN']
+    BATCH_SIZE = config['BATCH_SIZE']
+    warmup_steps = config['warmup_steps']
+    weight_decay = config['weight_decay']
+    model_name = config['model_name']
+    # specialty = config['specialty']
+    RANDOM_SEED = config['RANDOM_SEED']
+
+
+    # initialize tokenizer
+    tokenizer = BertTokenizer.from_pretrained(os.path.join(pretrained_path, model_name))
+
+    # create data loaders on datasets
+    train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+    val_data_loader = create_data_loader(df_val, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+
+    # initialize model
+    model=CustomBertMultiClassifier(pretrained_path, len(indexes_to_labels), device)
+    model = model.to(device)
+
+    ## training params
+    class_weight = []
+    sample = df_train[label_col].value_counts().to_dict() # full composition
+
+    for label in indexes_to_labels:
+        class_weight.append(max(sample.values()) / sample[label])
+
+    optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
+    total_steps = len(train_data_loader) * EPOCHS
+    scheduler = get_linear_schedule_with_warmup(
+                                                optimizer,
+                                                num_warmup_steps=warmup_steps,
+                                                num_training_steps=total_steps
+    )
+
+    # boost of minority class weight
+    loss_fn = nn.CrossEntropyLoss(
+                                    weight = torch.tensor(class_weight).to(device)
+                                    ).to(device)
+
+    binary = False
+    threshold = 0
+
+    for epoch in range(EPOCHS):
+        print(f'Epoch {epoch + 1}/{EPOCHS}')
+        print('-' * 10)
+        
+
+        preds, trues, train_loss = train_epoch(
+                                                model,
+                                                train_data_loader,
+                                                loss_fn,
+                                                optimizer,
+                                                device,
+                                                scheduler,
+                                                threshold,
+                                                binary
+                                                )
+        
+    
+    # after training evaluate
+    if focused_indexes:
+        train_score_all = eval_func(trues, preds, average = None)
+        print(train_score_all[focused_indexes])
+        train_score = np.mean(train_score_all[focused_indexes])
+    else:
+        train_score = eval_func(trues, preds, average = 'macro')
+
+    print(f'Train Score{train_score}  Avg loss {np.mean(train_loss)}  ')
+    print()
+    
+    preds, preds_probas, trues, val_loss = eval_model(
+                                            model,
+                                            val_data_loader,
+                                            loss_fn,
+                                            device,
+                                            threshold,
+                                            binary
+                                            )
+    
+    
+    if focused_indexes:
+        val_score_all = eval_func(trues, preds, average = None)
+        for index in focused_indexes:
+            print(f'{indexes_to_labels[index]}: F1 {val_score_all[index]} ')
+        val_score = np.mean(val_score_all[focused_indexes])
+        
+    else:
+        val_score = eval_func(trues, preds, average = 'macro')
+    print('-'*30)
+    print(f'Val Socre{val_score}  Avg loss {np.mean(val_loss)} ')
+    print()
+    
+
+        
+            
+
+    return val_score
+
+
+
 def train_multi_w_eval_steps(
                             model,
                             df_train, 
