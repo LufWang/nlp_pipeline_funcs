@@ -618,7 +618,7 @@ def train_binary(model,
     # after training evaluate
     train_score = eval_func(trues, preds, zero_division=0)
 
-    print(f'Train Score{train_score}  Avg loss {np.mean(train_loss)}  ')
+    print(f'Train Score: {round(train_score, 4)}  Avg loss: {round(np.mean(train_loss), 4)}  ')
 
     
     preds, preds_probas, trues, val_loss = eval_model(
@@ -633,7 +633,7 @@ def train_binary(model,
     val_score = eval_func(trues, preds, zero_division=0)
     
 
-    print(f'Val Socre{val_score}  Avg loss {np.mean(val_loss)} ')
+    print(f'Val Socre{round(val_score, 4)}  Avg loss {round(np.mean(val_loss), 4)} ')
     print()
     
 
@@ -950,7 +950,7 @@ def train_multi(model,
     else:
         train_score = eval_func(trues, preds, average = 'macro')
 
-    print(f'Train Score{train_score}  Avg loss {np.mean(train_loss)}  ')
+    print(f'Train Score: {round(train_score, 4)}  Avg loss: {round(np.mean(train_loss), 4)}  ')
 
     
     preds, preds_probas, trues, val_loss = eval_model(
@@ -966,13 +966,13 @@ def train_multi(model,
     if focused_indexes:
         val_score_all = eval_func(trues, preds, average = None)
         for index in focused_indexes:
-            print(f'{indexes_to_labels[index]}: F1 {val_score_all[index]} ')
+            print(f'{indexes_to_labels[index]}: Val Score {val_score_all[index]} ')
         val_score = np.mean(val_score_all[focused_indexes])
         
     else:
         val_score = eval_func(trues, preds, average = 'macro')
 
-    print(f'Val Socre{val_score}  Avg loss {np.mean(val_loss)} ')
+    print(f'Val Score: {round(val_score, 4)}  Avg loss: {round(np.mean(val_loss), 4)} ')
     print()
     
 
