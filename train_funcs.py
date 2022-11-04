@@ -945,7 +945,6 @@ def train_multi(model,
     # after training evaluate
     if focused_indexes:
         train_score_all = eval_func(trues, preds, average = None)
-        print(train_score_all[focused_indexes])
         train_score = np.mean(train_score_all[focused_indexes])
     else:
         train_score = eval_func(trues, preds, average = 'macro')
