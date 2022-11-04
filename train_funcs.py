@@ -909,7 +909,7 @@ def train_multi(model,
     for label in indexes_to_labels:
         class_weight.append(max(sample.values()) / sample[label])
 
-    optimizer = optim.AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     total_steps = len(train_data_loader) * EPOCHS
     scheduler = get_linear_schedule_with_warmup(
                                                 optimizer,
