@@ -619,7 +619,7 @@ def train_binary(model,
     train_score = eval_func(trues, preds, zero_division=0)
 
     print(f'Train Score{train_score}  Avg loss {np.mean(train_loss)}  ')
-    print()
+
     
     preds, preds_probas, trues, val_loss = eval_model(
                                             model,
@@ -632,7 +632,7 @@ def train_binary(model,
     
     val_score = eval_func(trues, preds, zero_division=0)
     
-    print('-'*30)
+
     print(f'Val Socre{val_score}  Avg loss {np.mean(val_loss)} ')
     print()
     
