@@ -951,7 +951,7 @@ def train_multi(model,
         train_score = eval_func(trues, preds, average = 'macro')
 
     print(f'Train Score{train_score}  Avg loss {np.mean(train_loss)}  ')
-    print()
+
     
     preds, preds_probas, trues, val_loss = eval_model(
                                             model,
@@ -971,7 +971,7 @@ def train_multi(model,
         
     else:
         val_score = eval_func(trues, preds, average = 'macro')
-    print('-'*30)
+
     print(f'Val Socre{val_score}  Avg loss {np.mean(val_loss)} ')
     print()
     
