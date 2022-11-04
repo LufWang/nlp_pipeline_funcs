@@ -531,26 +531,138 @@ def evaluate_by_metrics(y_true, y_pred, metrics_list, average = 'binary', verbos
 
     return results
 
-def train_binary(
-                 model,
-                 df_train, 
-                 df_val, 
-                 label_name, 
-                 text_col, 
-                 config, 
-                 threshold,
-                 best_val_score_global,
-                 device, 
-                 eval_freq, # evaluation frequency per epoch
-                 early_stopping,
-                 save_path,
-                 save_metric = f1_score,
-                 metrics_list = {
-                    "f1": f1_score,
-                    "precision": precision_score,
-                    "recall": recall_score,
-                    "confusion_matrix": confusion_matrix
-                 }):
+def train_binary(model,
+                df_train, 
+                df_val, 
+                tokenizer,
+                label_col,
+                text_col,
+                config,
+                device, 
+                threshold,
+                eval_func = f1_score
+
+               ):
+    
+    """
+    Function that wraps training and evaluating together for multiclassification
+    mainly used for cross validation
+    does not checkpoint model
+
+    Input:
+        train: dataframe
+        val: dataframe
+        label_name: str -name of label column
+        text column
+        config
+
+    Output:
+        best validation f1
+        best model name
+    """
+
+    # getting config
+    lr = config['lr']
+    EPOCHS = config['epoch']
+    MAX_LEN = config['MAX_LEN']
+    BATCH_SIZE = config['BATCH_SIZE']
+    warmup_steps = config['warmup_steps']
+    weight_decay = config['weight_decay']
+    model_name = config['model_name']
+    # specialty = config['specialty']
+    RANDOM_SEED = config['RANDOM_SEED']
+
+
+    # initialize tokenizer
+    # tokenizer = BertTokenizer.from_pretrained(os.path.join(pretrained_path, model_name))
+
+    # create data loaders on datasets
+    train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+    val_data_loader = create_data_loader(df_val, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+
+    ## training prereqs
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay = weight_decay) # optimizer to update weights
+    total_steps = len(train_data_loader) * EPOCHS
+    scheduler = get_linear_schedule_with_warmup(
+                                              optimizer,
+                                              num_warmup_steps=warmup_steps,
+                                              num_training_steps=total_steps
+    )
+
+    # loss function for binary classification
+    # getting ratio for pos_weight
+    RATIO = df_train[df_train[label_col] == 0].shape[0] / df_train[df_train[label_col] == 1].shape[0]
+    loss_fn = nn.BCEWithLogitsLoss(
+                                    pos_weight = torch.tensor(RATIO)
+                                    ).to(device)
+
+    binary = True
+
+    for epoch in range(EPOCHS):
+        print(f'Epoch {epoch + 1}/{EPOCHS}')
+        print('-' * 10)
+        
+
+        preds, trues, train_loss = train_epoch(
+                                                model,
+                                                train_data_loader,
+                                                loss_fn,
+                                                optimizer,
+                                                device,
+                                                scheduler,
+                                                threshold,
+                                                binary
+                                                )
+        
+    
+    # after training evaluate
+    train_score = eval_func(trues, preds, zero_division=0)
+
+    print(f'Train Score{train_score}  Avg loss {np.mean(train_loss)}  ')
+    print()
+    
+    preds, preds_probas, trues, val_loss = eval_model(
+                                            model,
+                                            val_data_loader,
+                                            loss_fn,
+                                            device,
+                                            threshold,
+                                            binary
+                                            )
+    
+    val_score = eval_func(trues, preds, zero_division=0)
+    
+    print('-'*30)
+    print(f'Val Socre{val_score}  Avg loss {np.mean(val_loss)} ')
+    print()
+    
+
+        
+            
+
+    return val_score
+
+
+def train_binary_w_eval_steps(
+                                model,
+                                df_train, 
+                                df_val, 
+                                label_name, 
+                                text_col, 
+                                config, 
+                                threshold,
+                                best_val_score_global,
+                                device, 
+                                eval_freq, # evaluation frequency per epoch
+                                early_stopping,
+                                save_path,
+                                save_metric = f1_score,
+                                metrics_list = {
+                                    "f1": f1_score,
+                                    "precision": precision_score,
+                                    "recall": recall_score,
+                                    "confusion_matrix": confusion_matrix
+                                }):
     
     """
     Function that wraps training and evaluating together using bce loss
@@ -797,7 +909,7 @@ def train_multi(model,
     for label in indexes_to_labels:
         class_weight.append(max(sample.values()) / sample[label])
 
-    optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, correct_bias=False, weight_decay=weight_decay)
     total_steps = len(train_data_loader) * EPOCHS
     scheduler = get_linear_schedule_with_warmup(
                                                 optimizer,
