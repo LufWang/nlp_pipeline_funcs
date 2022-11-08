@@ -1150,7 +1150,7 @@ def train_multi_w_eval_steps(
                                                                      threshold,
                                                                      binary
                                                                                     )
-                val_f1_by_label = {}
+                val_score_by_label = {}
                 
                 if focused_indexes:
 
@@ -1168,7 +1168,7 @@ def train_multi_w_eval_steps(
                             data.append(score)
                         
                         data_all.append(data)
-                        val_f1_by_label[indexes_to_labels[index]] = round(eval_results['f1_score'][index], 3)
+                        val_score_by_label[indexes_to_labels[index]] = round(val_score_all[index], 3)
                     
                     print()
                     print(tabulate(data_all, headers=['Label'] + list(eval_results.keys())))
@@ -1317,6 +1317,58 @@ def predict_multi_cohort(df, text_col, label_col, model, tokenizer, MAX_LEN, dev
     
     return texts, preds, preds_proba, true_labels, preds_probas_all
 
+def evaluate_single_spec_w_model_files(model_name, model_dir, df, text_col, label_col, pretrained_path):
+    """
+    Evaluate a single specialty model 
+    """
+    
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
+    model_id, specialty = model_name.split('-')
+    model_path = os.path.join(model_dir, model_name)
+    print(f'Evaluating Single Specialty Mutli Dtree Model: {specialty}...')
+    
+    
+    # read in label map
+    with open(os.path.join(model_path, f'{model_id}-indexes_to_labels.json'), 'rb') as handle:
+        indexes_to_labels = json.load(handle)
+    with open(os.path.join(model_path, f'{model_id}-labels_to_indexes.json'), 'rb') as handle:
+        labels_to_indexes = json.load(handle)
+
+    
+        
+    with open(os.path.join(model_path, f'{model_id}-config.json'), 'rb') as handle:
+        config = json.load(handle)
+        
+    MAX_LEN = config['MAX_LEN']
+    BATCH_SIZE = config['BATCH_SIZE']
+    
+    # load model from local
+    model = CustomBertMultiClassifier(pretrained_path, len(labels_to_indexes), device)
+    model.load_state_dict(torch.load(os.path.join(model_path, f'{model_id}-model.bin')))
+    model = model.to(device)
+    model.eval()
+    
+    BertTokenizer.from_pretrained(model_path)
+    
+    # prepare test data
+    df['label'] = df[label_col].apply(lambda x: labels_to_indexes.get(x, labels_to_indexes['OTHERS']))
+         
+    texts, preds, preds_proba, trues, preds_proba_all = tr_f.predict_multi_cohort(df, text_col, 'label', model, tokenizer, MAX_LEN, device, BATCH_SIZE)
+    
+    df['pred'] = preds
+    
+    precisions = precision_score(df.label, df.pred, average = None)
+    recalls = recall_score(df.label, df.pred, average = None)
+    f1s = f1_score(df.label, df.pred, average = None)
+    
+    for label in labels_to_indexes:
+        ind = labels_to_indexes[label]
+        print(f'{label}: Precision {precisions[ind]} Recall {recalls[ind]} F1 {f1s[ind]}')
+        print()
+    
+    
+    return df, (precisions, recalls, f1s), indexes_to_labels
 
 
 ####
@@ -1332,4 +1384,4 @@ def model_selection(path):
         print(model_info)
         print()
 
-    
+
