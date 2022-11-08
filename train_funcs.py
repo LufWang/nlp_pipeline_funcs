@@ -30,6 +30,7 @@ import json
 import shortuuid
 from nlp_pipeline_funcs.config import pretrained_path
 from tabulate import tabulate
+import shutil
 
 
 
@@ -1319,7 +1320,7 @@ def predict_multi_cohort(df, text_col, label_col, model, tokenizer, MAX_LEN, dev
 
 def evaluate_single_spec_w_model_files(model_name, model_dir, df, text_col, label_col, pretrained_path):
     """
-    Evaluate a single specialty model 
+    Evaluate a single specialty model for DFD
     """
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -1371,6 +1372,8 @@ def evaluate_single_spec_w_model_files(model_name, model_dir, df, text_col, labe
     return df, (precisions, recalls, f1s), indexes_to_labels
 
 
+
+
 ####
 # Helper functions
 #####
@@ -1383,5 +1386,27 @@ def model_selection(path):
         print(name)
         print(model_info)
         print()
+
+
+def move_model_files(model_dir, model_name, dest_dir):
+    """
+    Move a directory of model files to another directory, dir will be created if not exists
+    """
+
+    
+    src = os.path.join(model_dir, model_name)
+    
+    
+    if not os.path.exists(dest_dir):
+        os.mkdir(dest_dir)
+
+    dst = os.path.join(dest_dir, model_name)
+    
+    if os.path.exists(dst):
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+    
+    
+    print('Files Copied Successfully.')
 
 
