@@ -1349,12 +1349,12 @@ def evaluate_single_spec_w_model_files(model_name, model_dir, df, text_col, labe
     model = model.to(device)
     model.eval()
     
-    BertTokenizer.from_pretrained(model_path)
+    tokenizer = BertTokenizer.from_pretrained(model_path)
     
     # prepare test data
     df['label'] = df[label_col].apply(lambda x: labels_to_indexes.get(x, labels_to_indexes['OTHERS']))
          
-    texts, preds, preds_proba, trues, preds_proba_all = tr_f.predict_multi_cohort(df, text_col, 'label', model, tokenizer, MAX_LEN, device, BATCH_SIZE)
+    texts, preds, preds_proba, trues, preds_proba_all = predict_multi_cohort(df, text_col, 'label', model, tokenizer, MAX_LEN, device, BATCH_SIZE)
     
     df['pred'] = preds
     
