@@ -1198,7 +1198,7 @@ def train_multi_w_eval_steps(
                                 'val_loss': float(np.round(np.mean(val_losses), 4)),
                                 'time_generated': datetime.now().strftime("%m/%d/%Y, %H:%M:%S"),
                                 'focused_labels':  [indexes_to_labels[x]for x in focused_indexes] if focused_indexes  else [],
-                                'val_f1_by_focused_label': val_f1_by_label
+                                'val_f1_by_focused_label': val_score_by_label
                             }
                 
                         files = {
@@ -1238,7 +1238,215 @@ def train_multi_w_eval_steps(
 
 
 
+def train_multi_and_checkpoint(
+                            model,
+                            df_train, 
+                            df_val, 
+                            label_col,
+                            text_col,
+                            config,
+                            best_val_score_global,
+                            device, 
+                            save_model_name,
+                            labels_to_indexes,
+                            indexes_to_labels, 
+                            focused_indexes = None,
+                            save_path = None,
+                            metrics_list = {
+                                        "f1": f1_score
+                                     }
+                           ):
+    
+    """
+    Function that streamline training, evaluating, and saving model for multiclassification
+    Evaluate every [eval_every] steps
+    
+    Input:
+        df_train: pd dataframe
+        df_val: pd dataframe
+        label_col: str - column name to train on, need to be in int
+        text_col: str - column name for text input 
+        config: dict
+        best_val_f1_global: float - val_f1 threshold to save the model
+        device: str - torch device: gpu/cpu
+        save_model_name: str
+        labels_to_indexes: dict - map labels to indexes
+        indexes_to_labels: dict - map indexes to labels
+        eval_every: int - eval step9
+        early_stopping: int - how many evals to wait before terminate (if val metric does not improve)
+        focused_indexes: list - indexes of labels to focuse on (if passed in will save based on these focused labels only)
+        save_path: path (will create if not exist)
+    
+    Output:
+        best validation f1
+        best model name
+    """
+    
+    # getting config
+    lr = config['lr']
+    EPOCHS = config['epoch']
+    MAX_LEN = config['MAX_LEN']
+    BATCH_SIZE = config['BATCH_SIZE']
+    warmup_steps = config['warmup_steps']
+    weight_decay = config['weight_decay']
+    model_name = config['model_name']
+    boost = config['boost']
+    
+    print(pretrained_path)
+    # initialize tokenizer
+    tokenizer = BertTokenizer.from_pretrained(pretrained_path)
+    
+    # create data loaders on datasets
+    train_data_loader = create_data_loader(df_train, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+    val_data_loader = create_data_loader(df_val, text_col, label_col, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+    
 
+    ## assigning weights to each label class to account for imbalance
+    class_weight = []
+    sample = df_train[label_col].value_counts().to_dict()
+
+    for label in indexes_to_labels:
+        class_weight.append(max(sample.values()) / sample[label])
+    if focused_indexes: # if focused index boost their weights 
+        for index in focused_indexes:
+            class_weight[index] = class_weight[index] * float(boost)
+ 
+    
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    total_steps = len(train_data_loader) * EPOCHS
+    scheduler = get_linear_schedule_with_warmup(
+                                              optimizer,
+                                              num_warmup_steps=warmup_steps,
+                                              num_training_steps=total_steps
+    )
+
+    # boost of minority class weight
+    loss_fn = nn.CrossEntropyLoss(
+                                    weight = torch.tensor(class_weight).to(device)
+                                    ).to(device)
+    best_val_score = best_val_score_global
+    best_model_name = None
+    binary = False
+    threshold = 0
+    
+
+    val_losses_list = [] # record val loss every eval step -> for early stopping
+    running_train_loss = 0
+ 
+    
+    for epoch in range(EPOCHS):
+        print()
+        print()
+        print(f'Epoch {epoch + 1}/{EPOCHS}')
+        print('-' * 10)
+        
+        losses = []
+        train_preds_l = []
+        train_true_labels_l = []
+        
+        
+        # training through the train_data_loader
+        for d in tqdm(train_data_loader):
+            
+            model.train()
+            input_ids = d["input_ids"].to(device)
+            attention_mask = d["attention_mask"].to(device)
+            labels = d["labels"].to(device) 
+
+            # getting output on current weights
+            outputs = model(
+                              input_ids=input_ids,
+                              attention_mask=attention_mask
+                         )
+
+
+            # getting loss and preds for the current batch
+            loss, preds, preds_proba, preds_probas_all = get_loss_pred(outputs, labels, loss_fn, threshold, binary)
+
+            # backprogogate and update weights/biases
+            losses.append(loss.item())
+            running_train_loss += loss.item() # update running train loss
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+            
+            # add preds and true labels to list
+            train_preds_l.extend(preds.tolist())
+            train_true_labels_l.extend(labels.tolist())
+            
+            
+    # after training finishes evaluate
+    val_preds, val_preds_probas, val_trues, val_losses = eval_model(
+                                                            model,
+                                                            val_data_loader,
+                                                            loss_fn,
+                                                            device,
+                                                            threshold,
+                                                            binary
+                                                                        )
+    
+    if focused_indexes:
+
+        eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = None, verbose=False)
+        
+        # print out scores to console
+        data_all = []
+        for index in focused_indexes:
+            data = []
+            label_name = indexes_to_labels[index]
+            data.append(label_name)
+            for metric_name in eval_results:
+                score = round(eval_results[metric_name][index], 3)
+                data.append(score)
+            
+            data_all.append(data)
+        
+        print()
+        print(tabulate(data_all, headers=['Label'] + list(eval_results.keys())))
+        print()
+            
+            
+    else:
+        eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = 'macro', verbose=True)
+    
+    print()
+
+
+    if save_path:  # if a save path is provided, save model
+
+        if not os.path.isdir(save_path):
+            os.mkdir(save_path) # create directory if not exist
+        
+        
+        model_info = {
+                'val_scores': eval_results,
+                'val_loss': float(np.round(np.mean(val_losses), 4)),
+                'time_generated': datetime.now().strftime("%m/%d/%Y, %H:%M:%S"),
+                'focused_labels':  [indexes_to_labels[x]for x in focused_indexes] if focused_indexes  else []
+            }
+
+        files = {
+            'config.json': config,
+            'model_info.json': model_info,
+            'labels_to_indexes.json': labels_to_indexes,
+            'indexes_to_labels.json': indexes_to_labels
+            
+        }
+        
+        save_model_v2(model, tokenizer, save_model_name, save_path, files )
+
+
+    
+    val_loss = np.mean(val_losses) # getting average val loss
+    val_losses_list.append(val_loss)
+    
+        
+        
+  
+
+    return best_val_score, best_model_name
 
 """
 Functions for loading models and predicting
