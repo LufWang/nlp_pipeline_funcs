@@ -1407,11 +1407,14 @@ def train_multi_and_checkpoint(
         print(tabulate(data_all, headers=['Label'] + list(eval_results.keys())))
         print()
             
+        for eval_name in eval_results:
+            eval_results[eval_name] = float(np.mean(eval_results[eval_name][focused_indexes]))
             
     else:
         eval_results = evaluate_by_metrics(val_trues, val_preds, metrics_list, average = 'macro', verbose=True)
     
     print()
+
 
 
     if save_path:  # if a save path is provided, save model
