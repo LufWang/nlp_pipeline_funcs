@@ -432,7 +432,7 @@ def eval_model_detailed(model, data_loader, loss_fn, device, threshold = 0.5, bi
     preds_probas_all_l = []
     
     with torch.no_grad():
-        for d in tqdm(data_loader):
+        for d in data_loader:
             texts = d['text']
             input_ids = d["input_ids"].to(device)
             attention_mask = d["attention_mask"].to(device)
@@ -851,6 +851,163 @@ def train_binary_w_eval_steps(
                 
     return val_scores_list, best_val_score
     
+
+
+def train_binary_and_checkpoint(
+                                model,
+                                df_train, 
+                                df_val, 
+                                label_name, 
+                                text_col, 
+                                config, 
+                                threshold,
+                                device, 
+                                save_path,
+                                metrics_list = {
+                                    "f1": f1_score,
+                                    "precision": precision_score,
+                                    "recall": recall_score,
+                                    "confusion_matrix": confusion_matrix
+                                }):
+    
+    """
+    Function that wraps training and evaluating together using bce loss
+    # saving model based on val loss each eval step
+    
+    Input:
+        model
+        df_train
+        df_val
+        label col name
+        text col
+        config dictionary
+        decision threshold
+        best val score global
+        device
+        evaluate frequency
+        early stopping
+        save_path
+        save metric
+        metrics_list
+    
+
+    """
+    
+    # getting config
+    lr = config['lr']
+    EPOCHS = config['epoch']
+    MAX_LEN = config['MAX_LEN']
+    BATCH_SIZE = config['BATCH_SIZE']
+    weight_decay = config['weight_decay']
+    warmup_steps = config['warmup_steps']
+    
+    # create tokenizer
+    tokenizer = BertTokenizer.from_pretrained(pretrained_path)
+    
+    # getting ratio for pos_weight
+    RATIO = df_train[df_train[label_name] == 0].shape[0] / df_train[df_train[label_name] == 1].shape[0]
+    
+    # create data loaders on datasets
+    train_data_loader = create_data_loader(df_train, text_col, label_name, tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+    val_data_loader = create_data_loader(df_val, text_col, label_name,tokenizer, int(MAX_LEN), int(BATCH_SIZE))
+    
+    ## training prereqs
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay = weight_decay) # optimizer to update weights
+    total_steps = len(train_data_loader) * EPOCHS
+    scheduler = get_linear_schedule_with_warmup(
+                                              optimizer,
+                                              num_warmup_steps=warmup_steps,
+                                              num_training_steps=total_steps
+    )
+
+    # loss function for binary classification
+    loss_fn = nn.BCEWithLogitsLoss(
+                                    pos_weight = torch.tensor(RATIO )
+                                    ).to(device)
+    
+    
+    # get list eval steps 
+    epoch_steps = len(train_data_loader)
+    total_steps = epoch_steps * EPOCHS
+    total_evaluations = eval_freq * EPOCHS
+    print(f'Total Training Steps: {total_steps}')
+    eval_steps = [int(total_steps/total_evaluations) * i for i in range(1, total_evaluations)]
+    eval_steps.append(total_steps)
+    print('Evaluation Steps:', eval_steps)
+    eval_ind = 0
+    
+    binary = True  # doing binary classificaiton
+    
+  
+    running_train_loss = 0
+
+    
+    
+    # start training
+    for epoch in range(EPOCHS):
+
+        print(f'Epoch {epoch + 1}/{EPOCHS}')
+        print('-' * 10)
+        print('Training...')
+
+        losses = []
+        preds_l = []
+        true_labels_l = []
+        
+        # training through the train_data_loader
+        for d in tqdm(train_data_loader):
+            
+            model.train()
+
+            input_ids = d["input_ids"].to(device)
+            attention_mask = d["attention_mask"].to(device)
+            labels = d["labels"].to(device) 
+
+            # getting output on current weights
+            outputs = model(
+                              input_ids=input_ids,
+                              attention_mask=attention_mask
+                         )
+
+
+            # getting loss and preds for the current batch
+            loss, preds, preds_proba, preds_proba_all = get_loss_pred(outputs, labels, loss_fn, threshold, binary)
+
+            # backprogogate and update weights/biases
+            losses.append(loss.item())
+            running_train_loss += loss.item() # update running train loss
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+
+
+            preds_l.extend(preds.tolist())
+            true_labels_l.extend(labels.tolist())
+            
+                         
+    
+    # save model
+    if not os.path.isdir(save_path):
+        os.mkdir(save_path) # create directory for models if not existt
+
+
+        
+    files = {
+        'config.json': config 
+    }
+    
+    
+    save_model_v2(model, tokenizer, label_name, save_path, files)
+
+
+
+            
+        
+        
+    
+
 
 
 def train_multi(model,
